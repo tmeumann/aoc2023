@@ -64,51 +64,30 @@ impl Sample {
     }
 }
 
-struct Requirements {
-    max_red: u64,
-    max_green: u64,
-    max_blue: u64,
-}
+fn calculate_power(input: String) -> u64 {
+    let tokens: Vec<&str> = input.split(':').map(|s| s.trim()).collect();
 
-impl Requirements {
-    pub fn extract_id_if_legit(&self, input: String) -> Option<u64> {
-        let tokens: Vec<&str> = input.split(':').map(|s| s.trim()).collect();
+    let samples = tokens.last().unwrap();
 
-        let id_section = tokens.first().unwrap();
-        let samples = tokens.last().unwrap();
+    let samples: Vec<Sample> = samples
+        .split(';')
+        .map(|s| s.trim())
+        .map(Sample::parse)
+        .collect();
 
-        let samples: Vec<Sample> = samples
-            .split(';')
-            .map(|s| s.trim())
-            .map(Sample::parse)
-            .collect();
+    let Sample { red, green, blue } = Sample::total_seen(samples);
 
-        let Sample { red, green, blue } = Sample::total_seen(samples);
-
-        if red > self.max_red || green > self.max_green || blue > self.max_blue {
-            return None;
-        }
-
-        let id_str = id_section.split(' ').last().unwrap();
-
-        id_str.parse::<u64>().ok()
-    }
+    red * green * blue
 }
 
 fn main() {
     let file = File::open("input.txt").expect("Failed to open input file.");
     let reader = BufReader::new(file);
 
-    let requirements = Requirements {
-        max_red: 12,
-        max_green: 13,
-        max_blue: 14,
-    };
-
     let sum: u64 = reader
         .lines()
         .map_while(|l| l.ok())
-        .filter_map(|s| requirements.extract_id_if_legit(s))
+        .map(calculate_power)
         .sum();
 
     println!("{}", sum);
