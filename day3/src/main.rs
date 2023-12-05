@@ -1,31 +1,10 @@
-use std::cmp::max;
-use std::fs::{read_to_string, File};
-use std::io::{BufRead, BufReader, Read, Seek};
+use std::fs::read_to_string;
+use std::io::{BufRead, Read};
 
 #[derive(Debug)]
 struct Point {
     x: usize,
     y: usize,
-}
-
-impl Point {
-    pub fn is_within(&self, rectangle: &Rectangle) -> bool {
-        rectangle.contains(self)
-    }
-}
-
-struct Rectangle {
-    top_left: Point,
-    bottom_right: Point,
-}
-
-impl Rectangle {
-    pub fn contains(&self, point: &Point) -> bool {
-        self.top_left.x <= point.x
-            && point.x <= self.bottom_right.x
-            && self.top_left.y <= point.y
-            && point.y <= self.bottom_right.y
-    }
 }
 
 #[derive(Debug)]
@@ -36,7 +15,7 @@ struct Number {
 }
 
 impl Number {
-    pub fn is_adjacent_to_symbol(&self, symbols: &[Vec<bool>]) -> bool {
+    pub fn add_to_nearby_gears(&self, symbols: &mut [Vec<Option<Vec<u64>>>]) {
         let left = self.location.x.saturating_sub(1);
         let right = self.location.x + self.length;
         let top = self.location.y.saturating_sub(1);
@@ -44,32 +23,28 @@ impl Number {
 
         for x in left..=right {
             for y in top..=bottom {
-                if let Some(row) = symbols.get(y) {
-                    if let Some(symbol) = row.get(x) {
-                        if *symbol {
-                            return true;
-                        }
+                if let Some(row) = symbols.get_mut(y) {
+                    if let Some(Some(symbol)) = row.get_mut(x) {
+                        symbol.push(self.value);
                     }
                 }
             }
         }
-
-        false
     }
 }
 
-fn is_symbol(c: char) -> bool {
-    c != '.' && !c.is_ascii_digit()
+fn is_gear(c: char) -> bool {
+    c == '*'
 }
 
-fn build_symbol_arrays(input: &str) -> Vec<Vec<bool>> {
-    let mut symbols: Vec<Vec<bool>> = Vec::new();
+fn build_gear_arrays(input: &str) -> Vec<Vec<Option<Vec<u64>>>> {
+    let mut symbols: Vec<Vec<Option<Vec<u64>>>> = Vec::new();
 
     for line in input.lines() {
         let mut symbols_on_line = Vec::new();
 
         for c in line.chars() {
-            symbols_on_line.push(is_symbol(c));
+            symbols_on_line.push(if is_gear(c) { Some(Vec::new()) } else { None });
         }
 
         symbols.push(symbols_on_line);
@@ -119,15 +94,23 @@ fn build_number_array(input: &str) -> Vec<Number> {
 fn main() {
     let input: String = read_to_string("input.txt").expect("Failed to read input");
 
-    let symbols = build_symbol_arrays(&input);
+    let mut gears = build_gear_arrays(&input);
 
     let numbers = build_number_array(&input);
 
-    let sum: u64 = numbers
-        .iter()
-        .filter(|n| n.is_adjacent_to_symbol(&symbols))
-        .map(|n| n.value)
-        .sum();
+    for number in numbers {
+        number.add_to_nearby_gears(&mut gears);
+    }
 
-    println!("{}", sum);
+    let mut total: u64 = 0;
+
+    for row in gears {
+        for gear in row.iter().flatten() {
+            if gear.len() > 1 {
+                total += gear.iter().product::<u64>();
+            }
+        }
+    }
+
+    println!("{}", total);
 }
