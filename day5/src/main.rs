@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use std::fs::read_to_string;
 
 struct MapEntry {
@@ -22,7 +23,7 @@ impl MapEntry {
     }
 
     pub fn calculate_destination(&self, source: i64) -> Option<i64> {
-        let source_max = self.source_start + self.length;
+        let source_max = self.source_start + self.length - 1;
 
         if source < self.source_start || source > source_max {
             return None;
@@ -58,7 +59,7 @@ fn main() {
     let input_string = read_to_string("input.txt").unwrap();
     let input_sections: Vec<&str> = input_string.split("\n\n").collect();
 
-    let seeds: Vec<i64> = input_sections
+    let seed_input_numbers: Vec<i64> = input_sections
         .first()
         .unwrap()
         .split(':')
@@ -75,12 +76,14 @@ fn main() {
         .map(Mapperer::new)
         .collect();
 
-    let result = seeds
-        .iter()
+    let result = seed_input_numbers
+        .chunks_exact(2)
+        .par_bridge()
+        .flat_map(|chunk| chunk[0]..chunk[0] + chunk[1])
         .map(|n| {
             mapperers
                 .iter()
-                .fold(*n, |acc, m| m.calculate_destination(acc))
+                .fold(n, |acc, m| m.calculate_destination(acc))
         })
         .min()
         .unwrap();
