@@ -1,5 +1,4 @@
 use std::fs::read_to_string;
-use std::iter::zip;
 
 struct Race {
     time: i64,
@@ -25,29 +24,31 @@ impl Race {
 fn main() {
     let input_string = read_to_string("input.txt").unwrap();
 
-    let times: i64 = zip(
-        input_string
-            .lines()
-            .next()
-            .unwrap()
-            .split(':')
-            .last()
-            .unwrap()
-            .split_whitespace()
-            .flat_map(|s| s.parse::<i64>()),
-        input_string
-            .lines()
-            .last()
-            .unwrap()
-            .split(':')
-            .last()
-            .unwrap()
-            .split_whitespace()
-            .flat_map(|s| s.parse::<i64>()),
-    )
-    .map(Race::new)
-    .map(|r| r.ways_to_beat())
-    .product();
+    let time_string: String = input_string
+        .lines()
+        .next()
+        .unwrap()
+        .split(':')
+        .last()
+        .unwrap()
+        .split_whitespace()
+        .collect();
+    let time: i64 = time_string.parse().unwrap();
 
-    println!("{times:?}");
+    let distance_string: String = input_string
+        .lines()
+        .last()
+        .unwrap()
+        .split(':')
+        .last()
+        .unwrap()
+        .split_whitespace()
+        .collect();
+    let distance: i64 = distance_string.parse().unwrap();
+
+    let race = Race::new((time, distance));
+
+    let ways_to_beat = race.ways_to_beat();
+
+    println!("{ways_to_beat}");
 }
