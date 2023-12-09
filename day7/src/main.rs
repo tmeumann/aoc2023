@@ -4,13 +4,13 @@ use std::io::{BufRead, BufReader};
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Debug)]
 enum Hand {
-    FiveOfAKind(Vec<Card>),
-    FourOfAKind(Vec<Card>),
-    FullHouse(Vec<Card>),
-    ThreeOfAKind(Vec<Card>),
-    TwoPair(Vec<Card>),
-    OnePair(Vec<Card>),
     HighCard(Vec<Card>),
+    OnePair(Vec<Card>),
+    TwoPair(Vec<Card>),
+    ThreeOfAKind(Vec<Card>),
+    FullHouse(Vec<Card>),
+    FourOfAKind(Vec<Card>),
+    FiveOfAKind(Vec<Card>),
 }
 
 impl TryFrom<&str> for Hand {
@@ -30,27 +30,39 @@ impl TryFrom<&str> for Hand {
                     counter
                 });
 
-        let mut counts: Vec<u64> = counter.into_values().collect();
+        let mut counts: Vec<(u64, &Card)> = counter
+            .iter()
+            .map(|(card, count)| (*count, *card))
+            .collect();
 
         counts.sort();
 
-        let highest_count = counts.pop();
-        let second_highest_count = counts.pop();
+        let (mut highest_count, most_numerous_card) = counts.pop().ok_or(())?;
+
+        let mut second_highest = counts.pop().map(|(n, _)| n);
+
+        if *most_numerous_card == Card::Joker {
+            highest_count += second_highest.unwrap_or(0);
+            second_highest = counts.pop().map(|(n, _)| n)
+        } else {
+            let number_of_jokers = counter.get(&Card::Joker).unwrap_or(&0);
+            highest_count += number_of_jokers
+        }
 
         match highest_count {
-            Some(5) => Ok(Self::FiveOfAKind(cards)),
-            Some(4) => Ok(Self::FourOfAKind(cards)),
-            Some(3) => match second_highest_count {
+            5 => Ok(Self::FiveOfAKind(cards)),
+            4 => Ok(Self::FourOfAKind(cards)),
+            3 => match second_highest {
                 Some(2) => Ok(Self::FullHouse(cards)),
                 Some(1) => Ok(Self::ThreeOfAKind(cards)),
                 _ => Err(()),
             },
-            Some(2) => match second_highest_count {
+            2 => match second_highest {
                 Some(2) => Ok(Self::TwoPair(cards)),
                 Some(1) => Ok(Self::OnePair(cards)),
                 _ => Err(()),
             },
-            Some(1) => Ok(Self::HighCard(cards)),
+            1 => Ok(Self::HighCard(cards)),
             _ => Err(()),
         }
     }
@@ -58,19 +70,19 @@ impl TryFrom<&str> for Hand {
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 enum Card {
-    Ace,
-    King,
-    Queen,
-    Jack,
-    Ten,
-    Nine,
-    Eight,
-    Seven,
-    Six,
-    Five,
-    Four,
-    Three,
+    Joker,
     Two,
+    Three,
+    Four,
+    Five,
+    Six,
+    Seven,
+    Eight,
+    Nine,
+    Ten,
+    Queen,
+    King,
+    Ace,
 }
 
 impl TryFrom<char> for Card {
@@ -81,7 +93,6 @@ impl TryFrom<char> for Card {
             'A' => Ok(Self::Ace),
             'K' => Ok(Self::King),
             'Q' => Ok(Self::Queen),
-            'J' => Ok(Self::Jack),
             'T' => Ok(Self::Ten),
             '9' => Ok(Self::Nine),
             '8' => Ok(Self::Eight),
@@ -91,6 +102,7 @@ impl TryFrom<char> for Card {
             '4' => Ok(Self::Four),
             '3' => Ok(Self::Three),
             '2' => Ok(Self::Two),
+            'J' => Ok(Self::Joker),
             _ => Err(()),
         }
     }
@@ -130,7 +142,6 @@ fn main() {
 
     let result: u64 = plays
         .iter()
-        .rev()
         .enumerate()
         .map(|(i, Play { bid, .. })| (i + 1) as u64 * bid)
         .sum();
