@@ -103,24 +103,43 @@ fn main() {
         .collect::<Result<_, _>>()
         .expect("Failed to parse directions");
 
-    let node_arena = Arena::new();
+    let node_arena = Arena::with_capacity(input.lines().skip(2).count());
 
     let nodes = build_map(&input, &node_arena);
 
-    let mut current_node: &Node = nodes.get("AAA").expect("No starting node!");
-
-    let result = directions
-        .iter()
-        .cycle()
-        .map_while(|direction| {
-            if current_node.name == "ZZZ" {
-                None
-            } else {
-                current_node = current_node.get_neighbour(direction);
-                Some(())
-            }
+    // This is dumb, they're all straightforward cycles 🙄
+    let mut cycle_lengths: Vec<u64> = nodes
+        .values()
+        .filter(|node| node.name.ends_with('A'))
+        .cloned()
+        .map(|starting_node| {
+            let mut current_node = starting_node;
+            directions
+                .iter()
+                .cycle()
+                .map_while(|direction| {
+                    if current_node.name.ends_with('Z') {
+                        None
+                    } else {
+                        current_node = current_node.get_neighbour(direction);
+                        Some(())
+                    }
+                })
+                .count() as u64
         })
-        .count();
+        .collect();
 
-    println!("{result}");
+    cycle_lengths.sort();
+
+    let max_cycle_length = cycle_lengths
+        .last()
+        .expect("Failed to find any destination nodes");
+
+    let mut solution = *max_cycle_length;
+
+    while cycle_lengths.iter().any(|cl| solution % cl != 0) {
+        solution += max_cycle_length;
+    }
+
+    println!("{solution}");
 }
