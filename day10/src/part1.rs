@@ -36,10 +36,6 @@ impl Navigable for Position {
     }
 }
 
-type Breadcrumbs = Vec<Vec<bool>>;
-
-type TileMap = Vec<Vec<char>>;
-
 trait Map<T> {
     fn get_tile(&self, position: Position) -> T;
 }
@@ -188,12 +184,7 @@ impl ConnectedMap for Vec<Vec<char>> {
 }
 
 pub fn solve_part_1(input: String) -> usize {
-    let map: TileMap = input.lines().map(|line| line.chars().collect()).collect();
-
-    let _breadcrumbs: Breadcrumbs = input
-        .lines()
-        .map(|line| vec![false; line.chars().count()])
-        .collect();
+    let map: Vec<Vec<char>> = input.lines().map(|line| line.chars().collect()).collect();
 
     let starting_position = map.find_starting_position();
 
