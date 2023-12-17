@@ -1,67 +1,109 @@
+use ascii::{AsAsciiStr, AsciiChar, AsciiStr, AsciiString};
+use rayon::prelude::*;
 use std::fs::read_to_string;
 
-fn is_valid(condition_record: &[char], groups: &[usize]) -> bool {
-    if condition_record.contains(&'?') {
-        return false;
-    }
-
-    let calculated_groups: Vec<usize> = String::from_iter(condition_record)
-        .split_whitespace()
-        .map(|group| group.len())
-        .collect();
-
-    calculated_groups == groups
-}
-
-fn build_possible_records(incomplete_record: Vec<char>) -> Vec<Vec<char>> {
-    if let Some((i, _)) = incomplete_record
-        .iter()
-        .enumerate()
-        .find(|(_, &c)| c == '?')
-    {
-        let mut with_operational = incomplete_record.clone();
-        with_operational[i] = ' ';
-
-        let mut with_damaged = incomplete_record.clone();
-        with_damaged[i] = '#';
-
-        let mut possibilities = build_possible_records(with_operational);
-        possibilities.append(&mut build_possible_records(with_damaged));
-        possibilities
+// called when the last character was a '#' or equivalent
+fn consume_group(chars: &[AsciiChar], group_size: usize, remaining_groups: &[usize]) -> usize {
+    if group_size == 0 {
+        match chars.split_first() {
+            Some((AsciiChar::Dot | AsciiChar::Question, remaining_chars)) => {
+                // dot or question mark -- we're done consuming '#' for now
+                consume_space(remaining_chars, remaining_groups)
+            }
+            Some((AsciiChar::Hash, _)) => {
+                // we've hit a hash, but run out of group. no dice
+                0
+            }
+            None => {
+                if remaining_groups.is_empty() {
+                    // group has been consumed, no more input and no more groups
+                    1
+                } else {
+                    // group has been consumed, no more input but we have more groups!
+                    0
+                }
+            }
+            Some(_) => panic!("Unrecognised character"),
+        }
     } else {
-        vec![incomplete_record]
+        match chars.split_first() {
+            Some((AsciiChar::Hash | AsciiChar::Question, remaining_chars)) => {
+                consume_group(remaining_chars, group_size - 1, remaining_groups)
+            }
+            Some((AsciiChar::Dot, _)) | None => {
+                // expected more, but group ended
+                0
+            }
+            Some(_) => panic!("Unrecognised character"),
+        }
     }
 }
 
-fn count_combinations(condition_record: Vec<char>, groups: &[usize]) -> usize {
-    build_possible_records(condition_record)
-        .iter()
-        .filter(|condition_report| is_valid(condition_report, groups))
-        .count()
+fn consume_space(chars: &[AsciiChar], groups: &[usize]) -> usize {
+    match groups.split_first() {
+        // short circuit if we have no groups
+        None => {
+            if chars.iter().any(|&character| character == AsciiChar::Hash) {
+                // no more groups, but there's a '#' somewhere
+                0
+            } else {
+                // no more groups, no more hashes (all remaining question marks must be '.')
+                1
+            }
+        }
+        Some((group_size, remaining_groups)) => {
+            match chars.split_first() {
+                Some((AsciiChar::Dot, remaining_chars)) => consume_space(remaining_chars, groups),
+                Some((AsciiChar::Hash, remaining_chars)) => {
+                    consume_group(remaining_chars, *group_size - 1, remaining_groups)
+                }
+                Some((AsciiChar::Question, remaining_chars)) => {
+                    consume_group(remaining_chars, *group_size - 1, remaining_groups)
+                        + consume_space(remaining_chars, groups)
+                }
+                None => 0, // we expect a group, but we've run over the end of the string
+                Some(_) => panic!("Unrecognised character"),
+            }
+        }
+    }
 }
 
 fn main() {
-    let input = read_to_string("test.txt").unwrap();
+    let input = read_to_string("input.txt").unwrap();
 
     let result: usize = input
-        .lines()
-        .map(|l| {
-            let sub_strings: Vec<&str> = l.split_whitespace().collect();
+        .par_lines()
+        .map(|line| {
+            let sub_strings: Vec<&str> = line.split_whitespace().collect();
 
             if sub_strings.len() != 2 {
                 panic!("Input error");
             }
 
-            let condition_record = sub_strings[0]
-                .chars()
-                .map(|c| if c == '.' { ' ' } else { c })
-                .collect();
-            let groups: Vec<usize> = sub_strings[1]
+            let folded_record: &AsciiStr = sub_strings[0].as_ascii_str().unwrap();
+
+            let mut unfolded_record: AsciiString =
+                AsciiString::with_capacity(folded_record.len() * 5 + 4);
+            unfolded_record.extend(folded_record);
+            for _ in 0..4 {
+                unfolded_record.push(AsciiChar::Question);
+                unfolded_record.extend(folded_record);
+            }
+
+            let folded_groups: Vec<usize> = sub_strings[1]
                 .split(',')
                 .map(|s| s.parse::<usize>().unwrap())
                 .collect();
+            let mut unfolded_groups: Vec<usize> = Vec::with_capacity(folded_groups.len() * 5);
+            for _ in 0..5 {
+                unfolded_groups.extend(&folded_groups);
+            }
 
-            count_combinations(condition_record, &groups)
+            let possible_combinations = consume_space(unfolded_record.as_slice(), &unfolded_groups);
+
+            println!("{line}: {possible_combinations}");
+
+            possible_combinations
         })
         .sum();
 
