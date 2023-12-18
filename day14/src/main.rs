@@ -1,7 +1,8 @@
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Write};
 use std::fs::read_to_string;
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Hash)]
 enum Tile {
     SquareRock,
     RoundRock,
@@ -67,7 +68,7 @@ impl Dish {
         Self { map }
     }
 
-    fn shake_north(&mut self) {
+    fn tilt_north(&mut self) {
         loop {
             let mut something_moved = false;
 
@@ -89,6 +90,96 @@ impl Dish {
         }
     }
 
+    fn tilt_west(&mut self) {
+        loop {
+            let mut something_moved = false;
+
+            for row_index in 0..self.map.len() {
+                for column_index in 1..self.map[row_index].len() {
+                    if Tile::RoundRock == self.map[row_index][column_index]
+                        && Tile::Empty == self.map[row_index][column_index - 1]
+                    {
+                        self.map[row_index][column_index - 1] = Tile::RoundRock;
+                        self.map[row_index][column_index] = Tile::Empty;
+                        something_moved = true;
+                    }
+                }
+            }
+
+            if !something_moved {
+                break;
+            }
+        }
+    }
+
+    fn tilt_south(&mut self) {
+        loop {
+            let mut something_moved = false;
+
+            for row_index in (0..self.map.len() - 1).rev() {
+                for column_index in 0..self.map[row_index].len() {
+                    if Tile::RoundRock == self.map[row_index][column_index]
+                        && Tile::Empty == self.map[row_index + 1][column_index]
+                    {
+                        self.map[row_index + 1][column_index] = Tile::RoundRock;
+                        self.map[row_index][column_index] = Tile::Empty;
+                        something_moved = true;
+                    }
+                }
+            }
+
+            if !something_moved {
+                break;
+            }
+        }
+    }
+
+    fn tilt_east(&mut self) {
+        loop {
+            let mut something_moved = false;
+
+            for row_index in 0..self.map.len() {
+                for column_index in (0..self.map[row_index].len() - 1).rev() {
+                    if Tile::RoundRock == self.map[row_index][column_index]
+                        && Tile::Empty == self.map[row_index][column_index + 1]
+                    {
+                        self.map[row_index][column_index + 1] = Tile::RoundRock;
+                        self.map[row_index][column_index] = Tile::Empty;
+                        something_moved = true;
+                    }
+                }
+            }
+
+            if !something_moved {
+                break;
+            }
+        }
+    }
+
+    fn spin(&mut self, times: usize) {
+        let mut history: HashMap<String, usize> = HashMap::new();
+
+        for i in 0..times {
+            let current_hash_key = format!("{}", self);
+
+            if let Some(j) = history.get(&current_hash_key) {
+                let loop_length = i - j;
+                let remaining_iterations = times - i;
+
+                if remaining_iterations % loop_length == 0 {
+                    return;
+                }
+            }
+
+            history.insert(current_hash_key, i);
+
+            self.tilt_north();
+            self.tilt_west();
+            self.tilt_south();
+            self.tilt_east();
+        }
+    }
+
     fn total_load(&self) -> usize {
         self.map
             .iter()
@@ -104,7 +195,9 @@ fn main() {
     let input = read_to_string("input.txt").unwrap();
 
     let mut dish = Dish::new(&input);
-    dish.shake_north();
+
+    dish.spin(1_000_000_000);
+
     let total_load = dish.total_load();
 
     println!("{total_load}")
