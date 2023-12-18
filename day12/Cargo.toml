@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 ascii = "1.1.0"
+dashmap = { version = "5.5.3", features = ["rayon"] }
 rayon = "1.8.0"

@@ -1,14 +1,22 @@
 use ascii::{AsAsciiStr, AsciiChar, AsciiStr, AsciiString};
+use dashmap::DashMap;
 use rayon::prelude::*;
 use std::fs::read_to_string;
 
+type Cache = DashMap<(AsciiString, Vec<usize>), usize>;
+
 // called when the last character was a '#' or equivalent
-fn consume_group(chars: &[AsciiChar], group_size: usize, remaining_groups: &[usize]) -> usize {
+fn consume_group(
+    chars: &[AsciiChar],
+    group_size: usize,
+    remaining_groups: &[usize],
+    cache: &Cache,
+) -> usize {
     if group_size == 0 {
         match chars.split_first() {
             Some((AsciiChar::Dot | AsciiChar::Question, remaining_chars)) => {
                 // dot or question mark -- we're done consuming '#' for now
-                consume_space(remaining_chars, remaining_groups)
+                consume_space(remaining_chars, remaining_groups, cache)
             }
             Some((AsciiChar::Hash, _)) => {
                 // we've hit a hash, but run out of group. no dice
@@ -28,7 +36,7 @@ fn consume_group(chars: &[AsciiChar], group_size: usize, remaining_groups: &[usi
     } else {
         match chars.split_first() {
             Some((AsciiChar::Hash | AsciiChar::Question, remaining_chars)) => {
-                consume_group(remaining_chars, group_size - 1, remaining_groups)
+                consume_group(remaining_chars, group_size - 1, remaining_groups, cache)
             }
             Some((AsciiChar::Dot, _)) | None => {
                 // expected more, but group ended
@@ -39,7 +47,7 @@ fn consume_group(chars: &[AsciiChar], group_size: usize, remaining_groups: &[usi
     }
 }
 
-fn consume_space(chars: &[AsciiChar], groups: &[usize]) -> usize {
+fn consume_space(chars: &[AsciiChar], groups: &[usize], cache: &Cache) -> usize {
     match groups.split_first() {
         // short circuit if we have no groups
         None => {
@@ -53,13 +61,27 @@ fn consume_space(chars: &[AsciiChar], groups: &[usize]) -> usize {
         }
         Some((group_size, remaining_groups)) => {
             match chars.split_first() {
-                Some((AsciiChar::Dot, remaining_chars)) => consume_space(remaining_chars, groups),
+                Some((AsciiChar::Dot, remaining_chars)) => {
+                    consume_space(remaining_chars, groups, cache)
+                }
                 Some((AsciiChar::Hash, remaining_chars)) => {
-                    consume_group(remaining_chars, *group_size - 1, remaining_groups)
+                    consume_group(remaining_chars, *group_size - 1, remaining_groups, cache)
                 }
                 Some((AsciiChar::Question, remaining_chars)) => {
-                    consume_group(remaining_chars, *group_size - 1, remaining_groups)
-                        + consume_space(remaining_chars, groups)
+                    let cache_key = (AsciiString::from(remaining_chars), Vec::from(groups));
+                    match cache.get(&cache_key) {
+                        Some(val) => *val,
+                        None => {
+                            let result = consume_group(
+                                remaining_chars,
+                                *group_size - 1,
+                                remaining_groups,
+                                cache,
+                            ) + consume_space(remaining_chars, groups, cache);
+                            cache.insert(cache_key, result);
+                            result
+                        }
+                    }
                 }
                 None => 0, // we expect a group, but we've run over the end of the string
                 Some(_) => panic!("Unrecognised character"),
@@ -70,6 +92,8 @@ fn consume_space(chars: &[AsciiChar], groups: &[usize]) -> usize {
 
 fn main() {
     let input = read_to_string("input.txt").unwrap();
+
+    let cache: Cache = DashMap::new();
 
     let result: usize = input
         .par_lines()
@@ -99,7 +123,8 @@ fn main() {
                 unfolded_groups.extend(&folded_groups);
             }
 
-            let possible_combinations = consume_space(unfolded_record.as_slice(), &unfolded_groups);
+            let possible_combinations =
+                consume_space(unfolded_record.as_slice(), &unfolded_groups, &cache);
 
             println!("{line}: {possible_combinations}");
 
