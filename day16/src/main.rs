@@ -9,7 +9,7 @@ fn main() {
 
     let mut contraption = Contraption::new(&input);
 
-    let result = contraption.calculate_energy_level();
+    let result = contraption.calculate_max_energy();
 
     println!("{result}")
 }

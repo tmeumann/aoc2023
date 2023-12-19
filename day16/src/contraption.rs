@@ -31,7 +31,7 @@ impl Direction {
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
-struct Position {
+pub struct Position {
     row: usize,
     column: usize,
     facing: Direction,
@@ -199,16 +199,53 @@ impl Contraption {
         energised_tiles.len()
     }
 
-    pub fn calculate_energy_level(&mut self) -> usize {
-        let beam = Position {
-            row: 0,
-            column: 0,
-            facing: Direction::East,
-        };
+    pub fn calculate_energy_level(&mut self, position: Position) -> usize {
+        self.seen_beams = HashSet::new();
 
-        self.track_beam(Some(beam));
+        self.track_beam(Some(position));
 
         self.count_energised()
+    }
+
+    pub fn calculate_max_energy(&mut self) -> usize {
+        let number_of_columns = self.schematic.first().unwrap().len();
+
+        let mut starting_positions: Vec<Position> =
+            Vec::with_capacity(number_of_columns * self.schematic.len());
+
+        starting_positions.extend(self.schematic.first().unwrap().iter().enumerate().map(
+            |(column, ..)| Position {
+                row: 0,
+                column,
+                facing: Direction::South,
+            },
+        ));
+
+        starting_positions.extend(self.schematic.last().unwrap().iter().enumerate().map(
+            |(column, ..)| Position {
+                row: self.schematic.len() - 1,
+                column,
+                facing: Direction::North,
+            },
+        ));
+
+        starting_positions.extend(self.schematic.iter().enumerate().map(|(row, ..)| Position {
+            row,
+            column: 0,
+            facing: Direction::East,
+        }));
+
+        starting_positions.extend(self.schematic.iter().enumerate().map(|(row, ..)| Position {
+            row,
+            column: number_of_columns - 1,
+            facing: Direction::West,
+        }));
+
+        starting_positions
+            .iter()
+            .map(|&p| self.calculate_energy_level(p))
+            .max()
+            .unwrap()
     }
 }
 
