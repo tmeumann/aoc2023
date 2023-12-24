@@ -39,21 +39,29 @@ pub struct Position {
 }
 
 impl Position {
-    pub fn turn_left(&self) -> Self {
-        Position {
-            row: self.row,
-            column: self.column,
-            facing: self.facing.left(),
-            remaining: 3,
+    pub fn turn_left(&self) -> Option<Self> {
+        if self.remaining > 6 {
+            None
+        } else {
+            Some(Position {
+                row: self.row,
+                column: self.column,
+                facing: self.facing.left(),
+                remaining: 10,
+            })
         }
     }
 
-    pub fn turn_right(&self) -> Self {
-        Position {
-            row: self.row,
-            column: self.column,
-            facing: self.facing.right(),
-            remaining: 3,
+    pub fn turn_right(&self) -> Option<Self> {
+        if self.remaining > 6 {
+            None
+        } else {
+            Some(Position {
+                row: self.row,
+                column: self.column,
+                facing: self.facing.right(),
+                remaining: 10,
+            })
         }
     }
 
@@ -145,9 +153,9 @@ impl Explorer {
         let number_of_columns = map.first().unwrap().len();
 
         let visited: HashSet<Position> =
-            HashSet::with_capacity(number_of_columns * number_of_rows * 3 * 4);
+            HashSet::with_capacity(number_of_columns * number_of_rows * 10 * 4);
 
-        let queue = BinaryHeap::with_capacity(number_of_columns * number_of_rows * 3 * 4);
+        let queue = BinaryHeap::with_capacity(number_of_columns * number_of_rows * 10 * 4);
 
         Self {
             map,
@@ -158,8 +166,25 @@ impl Explorer {
         }
     }
 
-    fn search(&mut self, starting_position: Position) -> Result<u32, ()> {
-        self.queue.push(Reverse((0, starting_position)));
+    fn search(&mut self) -> Result<u32, ()> {
+        self.queue.push(Reverse((
+            0,
+            Position {
+                row: 0,
+                column: 0,
+                facing: Direction::East,
+                remaining: 10,
+            },
+        )));
+        self.queue.push(Reverse((
+            0,
+            Position {
+                row: 0,
+                column: 0,
+                facing: Direction::South,
+                remaining: 10,
+            },
+        )));
         loop {
             let Reverse((distance, position)) = self.queue.pop().ok_or(())?;
 
@@ -174,8 +199,8 @@ impl Explorer {
 
             for pos in [
                 position.move_forwards(),
-                position.turn_left().move_forwards(),
-                position.turn_right().move_forwards(),
+                position.turn_left().and_then(|p| p.move_forwards()),
+                position.turn_right().and_then(|p| p.move_forwards()),
             ]
             .into_iter()
             .flatten()
@@ -193,14 +218,7 @@ fn main() {
 
     let mut explorer = Explorer::new(&input);
 
-    let result = explorer
-        .search(Position {
-            row: 0,
-            column: 0,
-            facing: Direction::North,
-            remaining: 3,
-        })
-        .unwrap();
+    let result = explorer.search().unwrap();
 
     println!("{result:?}")
 }
