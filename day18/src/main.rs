@@ -1,9 +1,8 @@
-use ascii::{AsciiChar, AsciiString};
-use std::collections::VecDeque;
-use std::fmt::{Display, Formatter};
-use std::fs::File;
-use std::io::{BufRead, BufReader};
+use ascii::{AsAsciiStr, AsciiChar};
+use std::fmt::{Display, Formatter, Write};
+use std::fs::read_to_string;
 
+#[derive(Debug)]
 enum Direction {
     Up,
     Down,
@@ -11,34 +10,61 @@ enum Direction {
     Right,
 }
 
-impl TryFrom<&str> for Direction {
+impl Display for Direction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Direction::Up => f.write_char('U'),
+            Direction::Down => f.write_char('D'),
+            Direction::Left => f.write_char('L'),
+            Direction::Right => f.write_char('R'),
+        }
+    }
+}
+
+impl TryFrom<AsciiChar> for Direction {
     type Error = ();
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: AsciiChar) -> Result<Self, Self::Error> {
         match value {
-            "U" => Ok(Direction::Up),
-            "D" => Ok(Direction::Down),
-            "L" => Ok(Direction::Left),
-            "R" => Ok(Direction::Right),
+            AsciiChar::_0 => Ok(Direction::Right),
+            AsciiChar::_1 => Ok(Direction::Down),
+            AsciiChar::_2 => Ok(Direction::Left),
+            AsciiChar::_3 => Ok(Direction::Up),
             _ => Err(()),
         }
     }
 }
 
+#[derive(Debug)]
 struct Instruction {
     direction: Direction,
-    distance: u8,
+    distance: i64,
 }
 
-impl TryFrom<String> for Instruction {
-    type Error = ();
+impl TryFrom<&str> for Instruction {
+    type Error = String;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
         let sections: Vec<&str> = value.split_whitespace().collect();
 
-        let direction = (*sections.first().ok_or(())?).try_into()?;
+        let hex_str = *sections
+            .last()
+            .ok_or("Failed to get final space-separated section of input")?;
 
-        let distance = sections.get(1).ok_or(())?.parse::<u8>().map_err(|_| ())?;
+        let direction = hex_str
+            .get_ascii(7)
+            .ok_or("Failed to get 7th ascii character")?
+            .try_into()
+            .map_err(|_| "Failed to convert to direction")?;
+
+        let distance = i64::from_str_radix(
+            hex_str
+                .slice_ascii(2..hex_str.len() - 2)
+                .map_err(|_| "Failed to slice hex number...")?
+                .as_str(),
+            16,
+        )
+        .map_err(|_| "Failed to parse number")?;
 
         Ok(Self {
             direction,
@@ -47,226 +73,87 @@ impl TryFrom<String> for Instruction {
     }
 }
 
-pub struct Position {
-    row: usize,
-    column: usize,
-}
-
-impl Position {
-    fn up(&self) -> Option<Self> {
-        if self.row > 0 {
-            Some(Position {
-                row: self.row - 1,
-                column: self.column,
-            })
-        } else {
-            None
-        }
-    }
-
-    fn down(&self) -> Option<Self> {
-        Some(Position {
-            row: self.row + 1,
-            column: self.column,
-        })
-    }
-
-    fn right(&self) -> Option<Self> {
-        Some(Position {
-            row: self.row,
-            column: self.column + 1,
-        })
-    }
-
-    fn left(&self) -> Option<Self> {
-        if self.column > 0 {
-            Some(Position {
-                row: self.row,
-                column: self.column - 1,
-            })
-        } else {
-            None
-        }
-    }
-}
-
-struct MapBuilder {
-    map: VecDeque<VecDeque<AsciiChar>>,
-    position: Position,
-}
-
-impl Display for MapBuilder {
+impl Display for Instruction {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for row in &self.map {
-            writeln!(f, "{}", AsciiString::from_iter(row))?;
-        }
-        Ok(())
+        write!(f, "{} {}", self.direction, self.distance)
     }
 }
 
-// use vecdeques
-// dig up => add a # to the vd above, or create vd if not exists & then add
-// dig down => add a # to the vd above, or create vs if not exists & then add
-// dig right => set right to #, or append # and append empty to all other arrays
-// dig left => set left to #, or prepend # and prepend empty to all other arrays
-impl MapBuilder {
-    fn new() -> Self {
-        let map = VecDeque::from([VecDeque::from([AsciiChar::Hash])]);
-        let position = Position { row: 0, column: 0 };
+type Coordinate = (i64, i64);
 
-        Self { map, position }
+trait Euclidean {
+    fn up(&self, distance: i64) -> Self;
+    fn down(&self, distance: i64) -> Self;
+    fn right(&self, distance: i64) -> Self;
+    fn left(&self, distance: i64) -> Self;
+}
+
+impl Euclidean for Coordinate {
+    fn up(&self, distance: i64) -> Self {
+        (self.0, self.1 + distance)
     }
 
-    fn follow_instruction(&mut self, instruction: &Instruction) {
+    fn down(&self, distance: i64) -> Self {
+        (self.0, self.1 - distance)
+    }
+
+    fn right(&self, distance: i64) -> Self {
+        (self.0 + distance, self.1)
+    }
+
+    fn left(&self, distance: i64) -> Self {
+        (self.0 - distance, self.1)
+    }
+}
+
+fn build_vertices(instructions: &[Instruction]) -> Result<Vec<Coordinate>, ()> {
+    let mut coordinates: Vec<Coordinate> = Vec::with_capacity(instructions.len() + 1);
+
+    let mut coordinate: Coordinate = (0, 0);
+
+    for instruction in instructions {
         match instruction.direction {
-            Direction::Up => self.dig_up(instruction.distance),
-            Direction::Down => self.dig_down(instruction.distance),
-            Direction::Left => self.dig_left(instruction.distance),
-            Direction::Right => self.dig_right(instruction.distance),
-        }
-    }
-
-    fn dig_up(&mut self, distance: u8) {
-        for _ in 0..distance {
-            if self.position.row > 0 {
-                self.position.row -= 1;
-            } else {
-                self.map.push_front(self.build_row());
+            Direction::Up => {
+                coordinate = coordinate.up(instruction.distance);
             }
-            self.dig();
-        }
-    }
-
-    fn dig_down(&mut self, distance: u8) {
-        for _ in 0..distance {
-            if self.position.row >= self.map.len() - 1 {
-                self.map.push_back(self.build_row());
+            Direction::Down => {
+                coordinate = coordinate.down(instruction.distance);
             }
-            self.position.row += 1;
-            self.dig();
-        }
-    }
-
-    fn dig_left(&mut self, distance: u8) {
-        for _ in 0..distance {
-            if self.position.column > 0 {
-                self.position.column -= 1;
-            } else {
-                for row in &mut self.map {
-                    row.push_front(AsciiChar::Space)
-                }
+            Direction::Left => {
+                coordinate = coordinate.left(instruction.distance);
             }
-            self.dig();
-        }
-    }
-
-    fn dig_right(&mut self, distance: u8) {
-        for _ in 0..distance {
-            if self.position.column >= self.map[0].len() - 1 {
-                for row in &mut self.map {
-                    row.push_back(AsciiChar::Space)
-                }
-            }
-            self.position.column += 1;
-            self.dig();
-        }
-    }
-
-    fn dig(&mut self) {
-        self.map[self.position.row][self.position.column] = AsciiChar::Hash;
-    }
-
-    fn build_row(&self) -> VecDeque<AsciiChar> {
-        let row_length = self.map[0].len();
-
-        let mut row = VecDeque::with_capacity(row_length);
-
-        for _ in 0..row_length {
-            row.push_back(AsciiChar::Space);
-        }
-        row
-    }
-
-    fn mark_ground(&mut self) {
-        for column in 0..self.map[0].len() {
-            self.flood_from(Position { row: 0, column }, AsciiChar::Dot);
-            self.flood_from(
-                Position {
-                    row: self.map.len() - 1,
-                    column,
-                },
-                AsciiChar::Dot,
-            );
-        }
-        for row in 0..self.map.len() {
-            self.flood_from(Position { row, column: 0 }, AsciiChar::Dot);
-            self.flood_from(
-                Position {
-                    row,
-                    column: self.map[row].len() - 1,
-                },
-                AsciiChar::Dot,
-            );
-        }
-    }
-
-    fn excavate(&mut self) {
-        for row in self.map.iter_mut() {
-            for tile in row.iter_mut() {
-                if *tile == AsciiChar::Space {
-                    *tile = AsciiChar::Hash;
-                }
+            Direction::Right => {
+                coordinate = coordinate.right(instruction.distance);
             }
         }
+
+        coordinates.push(coordinate);
     }
 
-    fn flood_from(&mut self, position: Position, character: AsciiChar) {
-        if let Some(tile) = self
-            .map
-            .get_mut(position.row)
-            .and_then(|r| r.get_mut(position.column))
-        {
-            if *tile == AsciiChar::Space {
-                *tile = character;
-                [
-                    position.up(),
-                    position.down(),
-                    position.left(),
-                    position.right(),
-                ]
-                .into_iter()
-                .flatten()
-                .for_each(|p| self.flood_from(p, character));
-            }
-        }
-    }
+    Ok(coordinates)
+}
 
-    fn volume(&self) -> usize {
-        self.map
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .filter(|&&character| character == AsciiChar::Hash)
-                    .count()
-            })
-            .sum()
-    }
+fn calculate_area(vertices: &[Coordinate]) -> i64 {
+    // shoelace formula -- https://en.wikipedia.org/wiki/Shoelace_formula
+    vertices
+        .windows(2)
+        .map(|edge| edge[0].0 * edge[1].1 - edge[0].1 * edge[1].0)
+        .sum::<i64>()
+        / 2
 }
 
 fn main() {
-    let mut map_builder = MapBuilder::new();
+    let input = read_to_string("input.txt").unwrap();
 
-    BufReader::new(File::open("input.txt").unwrap())
-        .lines()
-        .map_while(|l| l.ok())
-        .flat_map(Instruction::try_from)
-        .for_each(|i| map_builder.follow_instruction(&i));
+    let instructions: Vec<Instruction> = input.lines().flat_map(Instruction::try_from).collect();
 
-    map_builder.mark_ground();
-    map_builder.excavate();
+    let vertices = build_vertices(&instructions).unwrap();
 
-    let lagoon_volume = map_builder.volume();
+    let area = calculate_area(&vertices).abs();
+    let border: i64 = instructions.iter().map(|i| i.distance.abs()).sum::<i64>();
 
-    println!("{map_builder}");
-    println!("{lagoon_volume}")
+    // pick's theorem, rearranged to find (b+i) -- https://en.wikipedia.org/wiki/Pick's_theorem
+    let total_cubic_metres = area + border / 2 + 1;
+
+    println!("{total_cubic_metres}")
 }
